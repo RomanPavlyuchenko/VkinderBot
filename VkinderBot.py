@@ -1,6 +1,5 @@
 import re
 import time
-from pprint import pprint
 from random import randrange
 from datetime import datetime, timedelta
 
@@ -47,60 +46,71 @@ class VkinderBot:
         else:
             return None
 
-    def _search_users(self, params, count=500, offset=0, b_month=0, b_day=0):
-        result = self.vk_user_token.users.search(
-            sex=params['gender'],
-            status=params['status'],
-            birth_year=params['b_year'],
-            city=params['city'],
-            # sort=0,
-            offset=offset,
-            birth_month=b_month,
-            birth_day=b_day,
-            count=count,
-            fields=('last_seen')
-        )
-        return result
+    # def _search_users(self, params, count=500, offset=0, b_month=0, b_day=0):
+    #     result = self.vk_user_token.users.search(
+    #         sex=params['gender'],
+    #         status=params['status'],
+    #         birth_year=params['b_year'],
+    #         city=params['city'],
+    #         # sort=0,
+    #         offset=offset,
+    #         birth_month=b_month,
+    #         birth_day=b_day,
+    #         count=count,
+    #         fields=('last_seen')
+    #     )
+    #     return result
 
 
     def search_all_users(self, params, count=500):
-        offset_incr = count
-        last_online = time.mktime((datetime.now() - timedelta(days=7)).timetuple())
 
-        searched_users_set = set()
-        response = self._search_users(params, count=count, offset=0)
+        def _search_users(vk, params, count=500, offset=0, b_month=0, b_day=0):
+            result = vk.users.search(
+                sex=params['gender'],
+                status=params['status'],
+                birth_year=params['b_year'],
+                city=params['city'],
+                # sort=0,
+                offset=offset,
+                birth_month=b_month,
+                birth_day=b_day,
+                count=count,
+                fields=('last_seen')
+            )
+            return result
 
-        if response['count'] <= 1000:
+        def _search_cycle(vk, params, month=0, day=0, count=500):
+            response = _search_users(vk, params, count=count, offset=0)
+            searched_users_set = set()
             offset = 0
             while response['items']:
                 for item in response['items']:
                     if 'last_seen' in item and item['last_seen']['time'] >= last_online:
                         searched_users_set.add(item['id'])
                 offset += offset_incr
-                response = self._search_users(params, count=count, offset=offset)
+                response = _search_users(vk, params, count=count, offset=offset, b_day=day, b_month=month)
+            return searched_users_set
+
+
+
+        offset_incr = count
+        last_online = time.mktime((datetime.now() - timedelta(days=7)).timetuple())
+
+        searched_users_set = set()
+        response = _search_users(self.vk_user_token, params=params, count=count, offset=0)
+
+        if response['count'] <= 1000:
+            searched_users_set = _search_cycle(self.vk_user_token, params)
         else:
+
             for month in range(1, 13):
-                response = self._search_users(params, count=count, b_month=month)
+                response = _search_users(self.vk_user_token, params, count=count, b_month=month)
                 if response['count'] <= 1000:
-                    offset = 0
-                    while response['items']:
-                        for item in response['items']:
-                            if 'last_seen' in item and item['last_seen']['time'] >= last_online:
-                                searched_users_set.add(item['id'])
-                        offset += offset_incr
-                        response = self._search_users(params, count=count, offset=offset, b_month=month)
+                    searched_users_set = searched_users_set.union(_search_cycle(self.vk_user_token, params=params, month=month))
                 else:
+
                     for day in range(1, 32):
-                        response = self._search_users(params, count=count, b_month=month, b_day=day)
-                        if response['count'] < 1000:
-                            offset = 0
-                            while response['items']:
-                                for item in response['items']:
-                                    if 'last_seen' in item and item['last_seen']['time'] >= last_online:
-                                        searched_users_set.add(item['id'])
-                                offset += offset_incr
-                                response = self._search_users(params, count=count, offset=offset, b_month=month,
-                                                              b_day=day)
+                        searched_users_set = searched_users_set.union(_search_cycle(self.vk_user_token, params=params, month=month, day=day))
 
         return searched_users_set
 
@@ -126,14 +136,6 @@ class VkinderBot:
                     'owner_id': photo['owner_id'],
                 }
 
-                # photo_sizes = []
-                # for size in photo['sizes']:
-                #     cur_size = {
-                #         'size': size['height'] * size['width'],
-                #         'url': size['url']
-                #     }
-                #     photo_sizes.append(cur_size)
-                # photo_sizes = sorted(photo_sizes, key= lambda i: i['size'])
                 count_comment = 0
                 try:
                     count_comment = self.vk_user_token.photos.getComments(
@@ -172,4 +174,3 @@ class VkinderBot:
                     id = re.search('[0-9]{1-9}', msg['text'])[0]
                     return id
         return None
-
