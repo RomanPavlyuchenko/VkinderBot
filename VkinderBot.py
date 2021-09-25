@@ -1,4 +1,8 @@
+import re
+import time
+from pprint import pprint
 from random import randrange
+from datetime import datetime, timedelta
 
 import vk_api
 from vk_api.exceptions import ApiError
@@ -6,7 +10,7 @@ from vk_api.longpoll import VkLongPoll
 
 
 def _get_link(id):
-    return f'http://vk.com/id{id}'
+    return f'vk.com/id{id}'
 
 
 class VkinderBot:
@@ -14,14 +18,16 @@ class VkinderBot:
     vk = None
     longpoll = None
     vk_user_token = None
+    group_id = None
 
     def __init__(self, group_token, user_token):
         self.vk_session = vk_api.VkApi(token=group_token)
         self.vk = self.vk_session.get_api()
         self.longpoll = VkLongPoll(self.vk_session)
         self.vk_user_token = vk_api.VkApi(token=user_token).get_api()
+        self.group_id = self.vk.groups.getById()[0]['id']
 
-    def send_msg(self, user_id, message, keyboard=None, attachment=''):
+    def send_msg(self, user_id, message='.', keyboard=None, attachment=''):
         self.vk_session.method('messages.send',
                                {'user_id': user_id,
                                 'message': message,
@@ -51,12 +57,15 @@ class VkinderBot:
             offset=offset,
             birth_month=b_month,
             birth_day=b_day,
-            count=count
+            count=count,
+            fields=('last_seen')
         )
         return result
 
+
     def search_all_users(self, params, count=500):
         offset_incr = count
+        last_online = time.mktime((datetime.now() - timedelta(days=7)).timetuple())
 
         searched_users_set = set()
         response = self._search_users(params, count=count, offset=0)
@@ -65,29 +74,30 @@ class VkinderBot:
             offset = 0
             while response['items']:
                 for item in response['items']:
-                    searched_users_set.add(item['id'])
+                    if 'last_seen' in item and item['last_seen']['time'] >= last_online:
+                        searched_users_set.add(item['id'])
                 offset += offset_incr
                 response = self._search_users(params, count=count, offset=offset)
         else:
-            print('search_for_month')
             for month in range(1, 13):
                 response = self._search_users(params, count=count, b_month=month)
-                if response['count'] < 1000:
+                if response['count'] <= 1000:
                     offset = 0
                     while response['items']:
                         for item in response['items']:
-                            searched_users_set.add(item['id'])
+                            if 'last_seen' in item and item['last_seen']['time'] >= last_online:
+                                searched_users_set.add(item['id'])
                         offset += offset_incr
                         response = self._search_users(params, count=count, offset=offset, b_month=month)
                 else:
-                    print('search_for_day')
                     for day in range(1, 32):
                         response = self._search_users(params, count=count, b_month=month, b_day=day)
                         if response['count'] < 1000:
                             offset = 0
                             while response['items']:
                                 for item in response['items']:
-                                    searched_users_set.add(item['id'])
+                                    if 'last_seen' in item and item['last_seen']['time'] >= last_online:
+                                        searched_users_set.add(item['id'])
                                 offset += offset_incr
                                 response = self._search_users(params, count=count, offset=offset, b_month=month,
                                                               b_day=day)
@@ -116,13 +126,13 @@ class VkinderBot:
                     'owner_id': photo['owner_id'],
                 }
 
-                photo_sizes = []
-                for size in photo['sizes']:
-                    cur_size = {
-                        'size': size['height'] * size['width'],
-                        # 'url': size['url']
-                    }
-                    photo_sizes.append(cur_size)
+                # photo_sizes = []
+                # for size in photo['sizes']:
+                #     cur_size = {
+                #         'size': size['height'] * size['width'],
+                #         'url': size['url']
+                #     }
+                #     photo_sizes.append(cur_size)
                 # photo_sizes = sorted(photo_sizes, key= lambda i: i['size'])
                 count_comment = 0
                 try:
@@ -153,3 +163,13 @@ class VkinderBot:
             print(msg)
 
         return {'msg': message, 'attach': attach}
+
+    def get_last_searched_from_msg(self, user_id):
+        msg_history = self.vk.messages.getHistory(user_id=user_id, count=200)
+        for msg in msg_history['items']:
+            if msg['from_id'] == -self.group_id:
+                if re.search('vk\.com\/id[0-9]{1-9}', msg['text']):
+                    id = re.search('[0-9]{1-9}', msg['text'])[0]
+                    return id
+        return None
+

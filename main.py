@@ -112,6 +112,7 @@ def menu_set_search_params(user_id, db: VkinderDB, bot: VkinderBot):
     bot.send_msg(user_id, keyboard=get_start_keyboard())
 
     db.set_search_params(user_id, search_params)
+    db.delete_searched(user_id)
 
 
 def user_is_exist(user_id, database):
@@ -131,7 +132,7 @@ def menu_start(user_id, db, bot):
         add_new_user(event.user_id, db)
         # set_search_params(event.user_id, db, bot)
 
-    bot.send_msg(user_id, 'Идем дальше', get_start_keyboard())
+    bot.send_msg(user_id, 'Занес тебя в базу', get_start_keyboard())
 
 
 def menu_next(user_id, db, bot):
@@ -152,6 +153,7 @@ def menu_next(user_id, db, bot):
                 return
 
             db.add_searched_users(user_id, search_list)
+            menu_next(user_id, db, bot)
     else:
         menu_set_search_params(user_id, db, bot)
         menu_next(user_id, db, bot)

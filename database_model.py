@@ -62,3 +62,16 @@ class ViewedUser(Base):
 
     def __str__(self):
         return str(self.id)
+
+
+user_to_favourite_user = sq.Table(
+    'user_to_favourite_user', Base.metadata,
+    sq.Column('user_id', sq.Integer, sq.ForeignKey('user.id')),
+    sq.Column('favourite_user_id', sq.Integer, sq.ForeignKey('favourite_user.id'))
+)
+
+
+class FavouriteUser(Base):
+    __tablename__ = 'favourite_user'
+    id = sq.Column(sq.Integer, primary_key=True)
+    users = relationship(User, secondary=user_to_favourite_user, backref='favourite')
