@@ -1,7 +1,7 @@
 import sqlalchemy as sq
 from sqlalchemy.orm import Session
 
-from database_model import User, ViewedUser, SearchedUser, SearchParams, FavouriteUser, Base
+from database_model import User, AssotiationUser, SearchParams, Base
 
 
 class VkinderDB:
@@ -21,17 +21,12 @@ class VkinderDB:
         self.Base.metadata.drop_all(self.engine)
         print('bd was drop')
 
-    def get_user(self, user_id) -> User:
+    def get_user(self, user_id):
         user = self.session.get(User, user_id)
         return user
 
-    def add_user(self, user_data):
-        new_user = User(
-            id=user_data['id'],
-            first_name=user_data['first_name'],
-            last_name=user_data['last_name'],
-            gender=user_data['gender']
-        )
+    def add_user(self, user_id):
+        new_user = User(id=user_id)
         self.session.add(new_user)
         self.session.commit()
 
@@ -41,24 +36,28 @@ class VkinderDB:
             user.params.b_year = search_params['b_year']
             user.params.city = search_params['city']
             user.params.status = search_params['status']
+            user.params.gender = search_params['gender']
         else:
             new_params = SearchParams(
                 user_id=user.id,
                 b_year=search_params['b_year'],
                 city=search_params['city'],
-                status=search_params['status']
+                status=search_params['status'],
+                gender=search_params['gender']
             )
             self.session.add(new_params)
         self.session.commit()
 
     def get_search_params(self, user_id):
         user = self.session.get(User, user_id)
+        if not user:
+            return None
         bd_params = user.params
         if bd_params:
             params = {
                 'city': bd_params.city,
                 'status': bd_params.status,
-                'gender': user.gender,
+                'gender': bd_params.gender,
                 'b_year': bd_params.b_year
             }
             return params
@@ -66,84 +65,60 @@ class VkinderDB:
             return None
 
     def add_viewed(self, user_id, viewed_id):
-        viewed = self.session.get(ViewedUser, viewed_id)
-        if viewed:
-            viewed.users.append(self.get_user(user_id))
-        else:
-            viewed = ViewedUser(id=viewed_id)
-            user = self.get_user(user_id)
-            viewed.users.append(user)
+        self.session.get(AssotiationUser,
+                         (user_id, viewed_id)).is_viewed = True
         self.session.commit()
 
     def get_searched_id(self, user_id):
         """
-        Возвращает id страницы найденной для пользователя, если найденных нет, то возвращает None
+        Возвращает id страницы найденной для пользователя,
+        если найденных нет, то возвращает None
         """
-        user = self.get_user(user_id)
-        if user.searched:
-            searched = user.searched.pop()
-            self.add_viewed(user_id, searched.id)
-            return searched.id
-        else:
+        searched_list = self.session.query(AssotiationUser).filter(
+            AssotiationUser.user_id_from == user_id,
+            AssotiationUser.is_viewed == False).all()
+
+        if not searched_list:
             return None
+
+        self.add_viewed(user_id, searched_list[0].user_id_to)
+        return searched_list[0].user_id_to
 
     def add_searched_users(self, user_id, searched_list_id):
         """
         Сохраняет найденные варианты для пользователя в базу
         """
-        user = self.get_user(user_id)
-        exist_searched_list = [i.id for i in self.session.query(User).join(SearchedUser, User.searched).filter(
-            User.id == user.id).all()]
-        exist_viewed_list = [i.id for i in
-                             self.session.query(User).join(ViewedUser, User.viewed).filter(User.id == user.id).all()]
-        temp_list = []
-
-        for search_id in searched_list_id:
-            if search_id in exist_searched_list or search_id in exist_viewed_list:
-                continue
+        for searched_id in searched_list_id:
+            if not self.get_user(searched_id):
+                self.add_user(searched_id)
+            searched_user = self.session.get(AssotiationUser,
+                                             (user_id, searched_id))
+            if searched_user:
+                searched_user.is_viewed = False
             else:
-                searched = self.session.get(SearchedUser, search_id)
-                if not searched:
-                    searched = SearchedUser(id=search_id)
-                searched.users.append(user)
-                temp_list.append(searched)
-
-        self.session.add_all(temp_list)
+                self.session.add(AssotiationUser(user_id_from=user_id,
+                                                 user_id_to=searched_id))
         self.session.commit()
 
     def delete_searched(self, user_id):
-        user = self.get_user(user_id)
-        user.searched = []
-        self.session.commit()
-        empty_searched = [i for i in self.session.query(SearchedUser).join(
-            User, SearchedUser.users, isouter=True).filter(SearchedUser.users == None).all()]
-        if empty_searched:
-            for empty in empty_searched:
-                self.session.delete(empty)
-        # self.session.query(SearchedUser).join(
-        #     User, SearchedUser.users, isouter=True).filter(SearchedUser.users == None).delete()
+        searcheds = self.get_user(user_id).user_to
+
+        for searched in searcheds:
+            self.session.delete(searched)
         self.session.commit()
 
-    def add_favourite_user(self, user_id, favourite_id):
-        user = self.get_user(user_id)
-        fav = self.session.get(FavouriteUser, favourite_id)
-        if not fav:
-            fav = FavouriteUser(id=favourite_id)
-        fav.users.append(user)
-        self.session.add(fav)
+    def add_favourite_user(self, user_id, favorite_id):
+        self.session.get(
+            AssotiationUser, (user_id, favorite_id)).is_favorite = True
         self.session.commit()
 
-    def delete_from_favourite(self, user_id, favourite_id):
-        user = self.get_user(user_id)
-        fav = self.session.get(FavouriteUser, favourite_id)
-        if fav:
-            if user in fav.users:
-                fav.users.remove(user)
-            if not fav.users:
-                self.session.delete(fav)
-            self.session.commit()
+    def delete_from_favourite(self, user_id, favorite_id):
+        self.session.get(
+            AssotiationUser, (user_id, favorite_id)).is_favorite = False
+        self.session.commit()
 
     def get_favourite_ids(self, user_id):
-        fav_id_list = [i.id for i in self.session.query(User).join(FavouriteUser, User.favourite).filter(
-            User.id == user_id).all()]
-        return fav_id_list
+        favorite_list = self.session.query(AssotiationUser).filter(
+            AssotiationUser.user_id_from == user_id,
+            AssotiationUser.is_favorite == True).all()
+        return favorite_list

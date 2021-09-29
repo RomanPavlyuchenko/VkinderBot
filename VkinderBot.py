@@ -1,5 +1,6 @@
 import re
 import time
+
 from random import randrange
 from datetime import datetime, timedelta
 
@@ -34,85 +35,124 @@ class VkinderBot:
                                 'attachment': attachment,
                                 'random_id': randrange(10 ** 7), })
 
-    def get_user_info(self, user_id) -> dict:
+    def get_user_info(self, user_id):
         info = self.vk.users.get(user_ids=(user_id),
-                                 fields=('first_name', 'last_name', 'bdate', 'city', 'relation', 'sex'))
+                                 fields=('first_name', 'last_name',
+                                         'bdate', 'city', 'relation', 'sex'))
         return info[0]
 
     def get_city_id(self, city_name):
-        response = self.vk_user_token.database.getCities(country_id=1, q=city_name)
-        if len(response['items']) >= 0:
+        response = self.vk_user_token.database.getCities(
+            country_id=1, q=city_name)
+        if len(response['items']) > 0:
             return response['items'][0]['id']
         else:
             return None
 
-    # def _search_users(self, params, count=500, offset=0, b_month=0, b_day=0):
-    #     result = self.vk_user_token.users.search(
-    #         sex=params['gender'],
-    #         status=params['status'],
-    #         birth_year=params['b_year'],
-    #         city=params['city'],
-    #         # sort=0,
-    #         offset=offset,
-    #         birth_month=b_month,
-    #         birth_day=b_day,
-    #         count=count,
-    #         fields=('last_seen')
-    #     )
-    #     return result
+    @classmethod
+    def _get_search_exec_code(cls, params, count=100):
+        code = "var users = [];\n" \
+               "var offset = 0;\n" \
+               "while (offset < 1000) {\n" \
+                    f"var resp = API.users.search(" \
+                                f"{{\"city\": {params['city']},"\
+                                f"\"count\": {count},"\
+                                f"\"offset\": offset,"\
+                                f"\"sex\": {params['gender']},"\
+                                f"\"status\": {params['status']},"\
+                                f"\"birth_year\": {params['b_year']},"\
+                                f"\"fields\": (\"last_seen\")}});\n" \
+                    "if (resp[\"count\"] > 1000) {\n" \
+                        "return resp;};\n" \
+                    "users.push(resp[\"items\"]);\n" \
+                    f"offset = offset + {count};\n" \
+               "};\n" \
+               "return users;"
 
+        return code
 
-    def search_all_users(self, params, count=500):
+    @classmethod
+    def _get_search_exec_code_months(cls, params, count=1000):
+        code = "var month = 1;\n" \
+                "var users = [];\n" \
+                "var big_months = [];\n" \
+                "while (month < 13) {\n" \
+                    "var response =" + f"API.users.search(" \
+                                        f"{{\"city\": {params['city']}," \
+                                        f"\"count\": {count}," \
+                                        f"\"sex\": {params['gender']}," \
+                                        f"\"status\": {params['status']}," \
+                                        f"\"birth_year\":{params['b_year']},"\
+                                        f"\"birth_month\": month," \
+                                        f"\"fields\": (\"last_seen\")}});\n" \
+                    "if (response[\"count\"] > 1000) {\n" \
+                        "big_months.push(month); }\n" \
+                    "else {\n" \
+                        "users.push(response[\"items\"]);};\n" \
+                    "month = month + 1;\n" \
+                "};\n" \
+                "return {\"users\": users, \"months\": big_months};\n"
 
-        def _search_users(vk, params, count=500, offset=0, b_month=0, b_day=0):
-            result = vk.users.search(
-                sex=params['gender'],
-                status=params['status'],
-                birth_year=params['b_year'],
-                city=params['city'],
-                # sort=0,
-                offset=offset,
-                birth_month=b_month,
-                birth_day=b_day,
-                count=count,
-                fields=('last_seen')
-            )
-            return result
+        return code
 
-        def _search_cycle(vk, params, month=0, day=0, count=500):
-            response = _search_users(vk, params, count=count, offset=0)
-            searched_users_set = set()
-            offset = 0
-            while response['items']:
-                for item in response['items']:
-                    if 'last_seen' in item and item['last_seen']['time'] >= last_online:
-                        searched_users_set.add(item['id'])
-                offset += offset_incr
-                response = _search_users(vk, params, count=count, offset=offset, b_day=day, b_month=month)
-            return searched_users_set
+    @classmethod
+    def _get_search_exec_code_days(cls, params, d_from,
+                                   d_to, count=1000, month=0):
+        code = f"var month = {month};\n" \
+                f"var day = {d_from};\n" \
+                "var users = [];\n" \
+                f"while (day < {d_to} + 1) {{\n" \
+                    f"var response = API.users.search(" \
+                                    f"{{\"city\": {params['city']}," \
+                                    f"\"count\": {count}," \
+                                    f"\"sex\": {params['gender']}," \
+                                    f"\"status\": {params['status']}," \
+                                    f"\"birth_year\": {params['b_year']}," \
+                                    f"\"birth_month\": month," \
+                                    f"\"fields\": (\"last_seen\")," \
+                                    "\"birth_day\": day});\n" \
+                    "users.push(response[\"items\"]);\n" \
+                    "day = day + 1;\n" \
+                "};\n" \
+                "return users;\n" \
 
+        return code
 
+    @classmethod
+    def get_last_seen(cls, users_list):
+        last_online_time = time.mktime((datetime.now() -
+                                        timedelta(days=7)).timetuple())
+        last_online_ids = []
+        for user in users_list:
+            if 'last_seen' in user \
+                    and user['last_seen']['time'] >= last_online_time:
+                last_online_ids.append(user['id'])
+        return last_online_ids
 
-        offset_incr = count
-        last_online = time.mktime((datetime.now() - timedelta(days=7)).timetuple())
+    def search_all_users(self, params):
+        users = []
+        response = self.vk_user_token.execute(
+            code=self._get_search_exec_code(params))
+        if 'count' not in response:
+            [users.extend(i) for i in response]
+            return self.get_last_seen(users)
 
-        searched_users_set = set()
-        response = _search_users(self.vk_user_token, params=params, count=count, offset=0)
+        response = self.vk_user_token.execute(
+            code=self._get_search_exec_code_months(params))
 
-        if response['count'] <= 1000:
-            searched_users_set = _search_cycle(self.vk_user_token, params)
-        else:
+        [users.extend(i) for i in response['users']]
+        for month in response['months']:
+            response_days = self.vk_user_token.execute(
+                code=self._get_search_exec_code_days(params, d_from=1,
+                                                     d_to=15, month=month))
+            [users.extend(i) for i in response_days]
 
-            for month in range(1, 13):
-                response = _search_users(self.vk_user_token, params, count=count, b_month=month)
-                if response['count'] <= 1000:
-                    searched_users_set = searched_users_set.union(_search_cycle(self.vk_user_token, params=params, month=month))
-                else:
+            response_days = self.vk_user_token.execute(
+                code=self._get_search_exec_code_days(params, d_from=15,
+                                                     d_to=31, month=month))
+            [users.extend(i) for i in response_days]
 
-                    for day in range(1, 32):
-                        searched_users_set = searched_users_set.union(_search_cycle(self.vk_user_token, params=params, month=month, day=day))
-
-        return searched_users_set
+        return self.get_last_seen(users)
 
     def _get_photos(self, user_id, album_id=-6, offset=0):
         response = self.vk_user_token.photos.get(
@@ -146,7 +186,8 @@ class VkinderBot:
                 except ApiError as msg:
                     print(msg)
 
-                cur_photo['popularity'] = photo['likes']['count'] + count_comment
+                cur_photo['popularity'] = \
+                    photo['likes']['count'] + count_comment
                 photos.append(cur_photo)
             offset += 100
             response = self._get_photos(user_id, offset=offset)
@@ -170,7 +211,7 @@ class VkinderBot:
         msg_history = self.vk.messages.getHistory(user_id=user_id, count=200)
         for msg in msg_history['items']:
             if msg['from_id'] == -self.group_id:
-                if re.search('vk\.com\/id[0-9]{1-9}', msg['text']):
+                if re.search(r'vk.com/id[0-9]{1-9}', msg['text']):
                     id = re.search('[0-9]{1-9}', msg['text'])[0]
                     return id
         return None

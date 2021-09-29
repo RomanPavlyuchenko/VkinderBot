@@ -5,18 +5,24 @@ from sqlalchemy.orm import relationship
 Base = declarative_base()
 
 
+class AssotiationUser(Base):
+    __tablename__ = 'assotiation_user'
+    user_id_from = sq.Column(sq.Integer,
+                             sq.ForeignKey('user.id'), primary_key=True)
+    user_id_to = sq.Column(sq.Integer,
+                           sq.ForeignKey('user.id'), primary_key=True)
+    is_favorite = sq.Column(sq.Boolean, default=False)
+    is_viewed = sq.Column(sq.Boolean, default=False)
+
+
 class User(Base):
     __tablename__ = 'user'
     id = sq.Column(sq.Integer, primary_key=True)
-    first_name = sq.Column(sq.String)
-    last_name = sq.Column(sq.String)
-    gender = sq.Column(sq.Integer)
-    # b_year = sq.Column(sq.Integer)
-    # searched_users = relationship('SearchedUser', secondary='user_to_searched_user')
     params = relationship('SearchParams', uselist=False, backref='user')
-
-    def __str__(self):
-        return f'{self.first_name} {self.last_name}'
+    user_to = relationship('AssotiationUser', backref='to',
+                           primaryjoin=id == AssotiationUser.user_id_from)
+    user_from = relationship('AssotiationUser', backref='from',
+                             primaryjoin=id == AssotiationUser.user_id_to)
 
 
 class SearchParams(Base):
@@ -29,49 +35,10 @@ class SearchParams(Base):
     gender = sq.Column(sq.String)
 
 
-user_to_searched_user = sq.Table(
-    'user_to_searched_user', Base.metadata,
-    sq.Column('user_id', sq.Integer, sq.ForeignKey('user.id')),
-    sq.Column('searched_user_id', sq.Integer, sq.ForeignKey('searched_user.id')),
+association_user = sq.Table(
+    'association_user', Base.metadata,
+    sq.Column('user_id_to', sq.Integer, sq.ForeignKey('user.id'),
+              primary_key=True),
+    sq.Column('user_id_from', sq.Integer, sq.ForeignKey('user.id'),
+              primary_key=True)
 )
-
-
-class SearchedUser(Base):
-    __tablename__ = 'searched_user'
-    id = sq.Column(sq.Integer, primary_key=True)
-    # first_name = sq.Column(sq.String)
-    # last_name = sq.Column(sq.String)
-    # b_date = sq.Column(sq.Date)
-    users = relationship(User, secondary=user_to_searched_user, backref='searched')
-
-    def __str__(self):
-        return str(self.id)
-
-
-user_to_viewed_user = sq.Table(
-    'user_to_viewed_user', Base.metadata,
-    sq.Column('user_id', sq.Integer, sq.ForeignKey('user.id')),
-    sq.Column('viewed_user_id', sq.Integer, sq.ForeignKey('viewed_user.id'))
-)
-
-
-class ViewedUser(Base):
-    __tablename__ = 'viewed_user'
-    id = sq.Column(sq.Integer, primary_key=True)
-    users = relationship(User, secondary=user_to_viewed_user, backref='viewed')
-
-    def __str__(self):
-        return str(self.id)
-
-
-user_to_favourite_user = sq.Table(
-    'user_to_favourite_user', Base.metadata,
-    sq.Column('user_id', sq.Integer, sq.ForeignKey('user.id')),
-    sq.Column('favourite_user_id', sq.Integer, sq.ForeignKey('favourite_user.id'))
-)
-
-
-class FavouriteUser(Base):
-    __tablename__ = 'favourite_user'
-    id = sq.Column(sq.Integer, primary_key=True)
-    users = relationship(User, secondary=user_to_favourite_user, backref='favourite')
