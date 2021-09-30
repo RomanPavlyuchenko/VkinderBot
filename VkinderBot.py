@@ -51,70 +51,73 @@ class VkinderBot:
 
     @classmethod
     def _get_search_exec_code(cls, params, count=100):
-        code = "var users = [];\n" \
-               "var offset = 0;\n" \
-               "while (offset < 1000) {\n" \
-                    f"var resp = API.users.search(" \
-                                f"{{\"city\": {params['city']},"\
-                                f"\"count\": {count},"\
-                                f"\"offset\": offset,"\
-                                f"\"sex\": {params['gender']},"\
-                                f"\"status\": {params['status']},"\
-                                f"\"birth_year\": {params['b_year']},"\
-                                f"\"fields\": (\"last_seen\")}});\n" \
-                    "if (resp[\"count\"] > 1000) {\n" \
-                        "return resp;};\n" \
-                    "users.push(resp[\"items\"]);\n" \
-                    f"offset = offset + {count};\n" \
-               "};\n" \
-               "return users;"
+        code = f"""var users = [];
+               var offset = 0;
+               while (offset < 1000) {{
+                    var resp = API.users.search(
+                                {{\"city\": {params['city']},
+                                \"count\": {count},
+                                \"offset\": offset,
+                                \"sex\": {params['gender']},
+                                \"status\": {params['status']},
+                                \"birth_year\": {params['b_year']},
+                                \"fields\": (\"last_seen\")}});
+                    if (resp[\"count\"] > 1000) {{
+                        return resp;}};
+                    users.push(resp[\"items\"]);
+                    offset = offset + {count};
+               }};
+               return users;
+        """
 
         return code
 
     @classmethod
     def _get_search_exec_code_months(cls, params, count=1000):
-        code = "var month = 1;\n" \
-                "var users = [];\n" \
-                "var big_months = [];\n" \
-                "while (month < 13) {\n" \
-                    "var response =" + f"API.users.search(" \
-                                        f"{{\"city\": {params['city']}," \
-                                        f"\"count\": {count}," \
-                                        f"\"sex\": {params['gender']}," \
-                                        f"\"status\": {params['status']}," \
-                                        f"\"birth_year\":{params['b_year']},"\
-                                        f"\"birth_month\": month," \
-                                        f"\"fields\": (\"last_seen\")}});\n" \
-                    "if (response[\"count\"] > 1000) {\n" \
-                        "big_months.push(month); }\n" \
-                    "else {\n" \
-                        "users.push(response[\"items\"]);};\n" \
-                    "month = month + 1;\n" \
-                "};\n" \
-                "return {\"users\": users, \"months\": big_months};\n"
+        code = f"""var month = 1;
+                var users = [];
+                var big_months = [];
+                while (month < 13) {{
+                    var response = API.users.search(
+                                        {{\"city\": {params['city']},
+                                        \"count\": {count},
+                                        \"sex\": {params['gender']},
+                                        \"status\": {params['status']},
+                                        \"birth_year\":{params['b_year']},
+                                        \"birth_month\": month,
+                                        \"fields\": (\"last_seen\")}});
+                    if (response[\"count\"] > 1000) {{
+                        big_months.push(month); }}
+                    else {{
+                        users.push(response[\"items\"]);}};
+                    month = month + 1;
+                }};
+                return {{\"users\": users, \"months\": big_months}};
+        """
 
         return code
 
     @classmethod
     def _get_search_exec_code_days(cls, params, d_from,
                                    d_to, count=1000, month=0):
-        code = f"var month = {month};\n" \
-                f"var day = {d_from};\n" \
-                "var users = [];\n" \
-                f"while (day < {d_to} + 1) {{\n" \
-                    f"var response = API.users.search(" \
-                                    f"{{\"city\": {params['city']}," \
-                                    f"\"count\": {count}," \
-                                    f"\"sex\": {params['gender']}," \
-                                    f"\"status\": {params['status']}," \
-                                    f"\"birth_year\": {params['b_year']}," \
-                                    f"\"birth_month\": month," \
-                                    f"\"fields\": (\"last_seen\")," \
-                                    "\"birth_day\": day});\n" \
-                    "users.push(response[\"items\"]);\n" \
-                    "day = day + 1;\n" \
-                "};\n" \
-                "return users;\n" \
+        code = f"""var month = {month};
+                var day = {d_from};
+                var users = [];
+                while (day < {d_to} + 1) {{
+                    var response = API.users.search(
+                                    {{\"city\": {params['city']},
+                                    \"count\": {count},
+                                    \"sex\": {params['gender']},
+                                    \"status\": {params['status']},
+                                    \"birth_year\": {params['b_year']},
+                                    \"birth_month\": month,
+                                    \"fields\": (\"last_seen\"),
+                                    \"birth_day\": day}});
+                    users.push(response[\"items\"]);
+                    day = day + 1;
+                }};
+                return users;
+                """
 
         return code
 

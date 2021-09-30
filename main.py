@@ -114,6 +114,7 @@ def menu_set_search_params(user_id, db: VkinderDB, bot: VkinderBot):
 
     db.set_search_params(user_id, search_params)
     db.delete_searched(user_id)
+    menu_next(user_id, db, bot)
 
 
 def user_is_exist(user_id, database):
